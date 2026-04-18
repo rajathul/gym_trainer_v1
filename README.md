@@ -17,7 +17,7 @@ Real-time squat form coaching web app using MoveNet in the browser.
 Use a local server because camera access generally requires an origin like `http://localhost`.
 
 ```bash
-cd /home/athul/my_workspace/antler_hackathon_2/gym_trainer_v1
+cd path/to/gym_trainer_v1
 python3 -m http.server 8080
 ```
 
@@ -58,11 +58,13 @@ View mode:
 
 To run both approaches side-by-side:
 
-1. Open `calibration.config.js`
-2. Set `llmCompareEnabled: true`
-3. Add your key in `geminiApiKey`
-4. Keep `geminiModel` as `gemini-2.0-flash` (or change as needed)
-5. Hard refresh browser (`Ctrl+Shift+R`)
+1. Copy `calibration.local.example.js` to `calibration.local.js` (the latter is git-ignored).
+2. Put your Gemini key in the `geminiApiKey` field of `calibration.local.js`.
+3. In `calibration.config.js`, set `llmCompareEnabled: true` and pick a `geminiModel`.
+4. Hard refresh browser (`Ctrl+Shift+R`).
+
+The key is sent to Google as the `x-goog-api-key` request header (not in the URL),
+so it does not show up in browser history or the DevTools URL column.
 
 You will see a comparison panel with:
 
