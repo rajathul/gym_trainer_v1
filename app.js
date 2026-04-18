@@ -57,6 +57,7 @@ const DEFAULT_CONFIG = {
 const APP_CONFIG = {
   ...DEFAULT_CONFIG,
   ...(window.SQUAT_CONFIG || {}),
+  ...(window.SQUAT_CONFIG_SECRETS || {}),
 };
 
 const MOTION_MODEL = String(
@@ -779,7 +780,7 @@ async function requestGeminiFeedback(repSummary) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     GEMINI_MODEL
-  )}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  )}:generateContent`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("timeout"), LLM_TIMEOUT_MS);
@@ -789,6 +790,7 @@ async function requestGeminiFeedback(repSummary) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
       },
       body: JSON.stringify(body),
       signal: controller.signal,

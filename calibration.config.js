@@ -50,7 +50,7 @@ window.SQUAT_CONFIG = {
   llmCompareEnabled: true,
   llmProvider: "gemini",
   geminiModel: "gemini-3.1-flash-lite-preview",
-  geminiApiKey: "",
+  // geminiApiKey lives in calibration.local.js (git-ignored). See calibration.local.example.js.
   llmTimeoutMs: 20000,
   llmIncludeFrameSeries: false,
   llmMaxFrames: 24,
