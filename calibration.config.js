@@ -8,6 +8,11 @@ window.SQUAT_CONFIG = {
   // Side view enables torso lean and hip-hinge checks by default.
   cameraView: "front",
 
+  // Camera selection: "auto", "user" (front), or "environment" (back)
+  // In auto mode, mobile prefers back camera when preferBackCameraOnMobile is true.
+  cameraFacingMode: "auto",
+  preferBackCameraOnMobile: true,
+
   // Detection + performance
   minKeypointConfidence: 0.35,
   smoothWindow: 5,

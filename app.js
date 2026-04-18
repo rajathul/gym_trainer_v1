@@ -25,6 +25,8 @@ const llmMessageEl = document.getElementById("llmMessage");
 const DEFAULT_CONFIG = {
   motion_model: "movenet",
   cameraView: "front",
+  cameraFacingMode: "auto",
+  preferBackCameraOnMobile: true,
   minKeypointConfidence: 0.35,
   smoothWindow: 5,
   frameSkip: 2,
@@ -67,6 +69,8 @@ const MOTION_MODEL = String(
 const MIN_KEYPOINT_CONF = APP_CONFIG.minKeypointConfidence;
 const SMOOTH_WINDOW = APP_CONFIG.smoothWindow;
 const FRAME_SKIP = APP_CONFIG.frameSkip;
+const CAMERA_FACING_MODE = String(APP_CONFIG.cameraFacingMode || "auto").toLowerCase();
+const PREFER_BACK_CAMERA_ON_MOBILE = APP_CONFIG.preferBackCameraOnMobile !== false;
 
 const START_DESCENT_OFFSET = APP_CONFIG.startDescentOffset;
 const BOTTOM_OFFSET = APP_CONFIG.bottomOffset;
@@ -126,6 +130,7 @@ const state = {
   repSequence: 0,
   activeRepFrames: [],
   activeRepStartedAtMs: null,
+  activeFacingMode: "user",
 };
 
 const EDGES = [
@@ -197,17 +202,54 @@ async function createPoseDetector(modelName) {
 }
 
 async function setupCamera() {
-  state.stream = await navigator.mediaDevices.getUserMedia({
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const preferredFacingMode = resolvePreferredFacingMode(isMobile);
+
+  const preferredConstraints = {
     audio: false,
     video: {
-      facingMode: "user",
+      facingMode: { ideal: preferredFacingMode },
       width: { ideal: 1280 },
       height: { ideal: 720 },
     },
-  });
+  };
+
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia(preferredConstraints);
+    state.activeFacingMode = preferredFacingMode;
+  } catch (primaryError) {
+    console.warn("Preferred camera failed, trying fallback user camera", primaryError);
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "user" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    state.activeFacingMode = "user";
+  }
 
   videoEl.srcObject = state.stream;
   await videoEl.play();
+  updateVideoMirroring(state.activeFacingMode);
+}
+
+function resolvePreferredFacingMode(isMobile) {
+  if (CAMERA_FACING_MODE === "user" || CAMERA_FACING_MODE === "environment") {
+    return CAMERA_FACING_MODE;
+  }
+  if (isMobile && PREFER_BACK_CAMERA_ON_MOBILE) {
+    return "environment";
+  }
+  return "user";
+}
+
+function updateVideoMirroring(facingMode) {
+  const shouldMirror = facingMode !== "environment";
+  const transformValue = shouldMirror ? "scaleX(-1)" : "none";
+  videoEl.style.transform = transformValue;
+  canvasEl.style.transform = transformValue;
 }
 
 function resizeCanvasToVideo() {
