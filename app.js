@@ -28,6 +28,8 @@ const DEFAULT_CONFIG = {
   minKeypointConfidence: 0.35,
   smoothWindow: 5,
   frameSkip: 2,
+  baselineWindowFrames: 15,
+  baselineStdDevThreshold: 4,
   startDescentOffset: 20,
   bottomOffset: 45,
   standTolerance: 16,
@@ -67,6 +69,20 @@ const MOTION_MODEL = String(
 const MIN_KEYPOINT_CONF = APP_CONFIG.minKeypointConfidence;
 const SMOOTH_WINDOW = APP_CONFIG.smoothWindow;
 const FRAME_SKIP = APP_CONFIG.frameSkip;
+const BASELINE_WINDOW_FRAMES = APP_CONFIG.baselineWindowFrames;
+const BASELINE_STDDEV_THRESHOLD = APP_CONFIG.baselineStdDevThreshold;
+
+const TRACKED_BODY_KEYPOINTS = [
+  "left_shoulder",
+  "right_shoulder",
+  "left_hip",
+  "right_hip",
+  "left_knee",
+  "right_knee",
+  "left_ankle",
+  "right_ankle",
+];
+const TRACKED_BODY_KEYPOINT_SET = new Set(TRACKED_BODY_KEYPOINTS);
 
 const START_DESCENT_OFFSET = APP_CONFIG.startDescentOffset;
 const BOTTOM_OFFSET = APP_CONFIG.bottomOffset;
@@ -116,6 +132,8 @@ const state = {
   frameCount: 0,
   lastHipY: null,
   baselineHipY: null,
+  baselineLocked: false,
+  baselineSamples: [],
   smoothBuckets: {},
   totalReps: 0,
   correctReps: 0,
@@ -126,6 +144,7 @@ const state = {
   repSequence: 0,
   activeRepFrames: [],
   activeRepStartedAtMs: null,
+  llmInFlight: false,
 };
 
 const EDGES = [
@@ -299,8 +318,15 @@ function getAverageConfidence(keypoints) {
     return 0;
   }
 
-  const sum = keypoints.reduce((acc, kp) => acc + (kp.score ?? 0), 0);
-  return sum / keypoints.length;
+  const tracked = keypoints.filter(
+    (kp) => kp.name && TRACKED_BODY_KEYPOINT_SET.has(kp.name)
+  );
+  if (!tracked.length) {
+    return 0;
+  }
+
+  const sum = tracked.reduce((acc, kp) => acc + (kp.score ?? 0), 0);
+  return sum / tracked.length;
 }
 
 function computeAngles(keypointMap, rawKeypointMap) {
@@ -369,19 +395,8 @@ function computeAngles(keypointMap, rawKeypointMap) {
 }
 
 function extractLlmKeypoints(rawKeypointMap) {
-  const names = [
-    "left_shoulder",
-    "right_shoulder",
-    "left_hip",
-    "right_hip",
-    "left_knee",
-    "right_knee",
-    "left_ankle",
-    "right_ankle",
-  ];
-
   const result = {};
-  for (const name of names) {
+  for (const name of TRACKED_BODY_KEYPOINTS) {
     const kp = rawKeypointMap?.[name];
     result[name] = kp
       ? {
@@ -399,8 +414,27 @@ function detectRepState(metrics) {
   const hipY = metrics.hip.y;
   const kneeY = metrics.knee.y;
 
-  if (state.baselineHipY === null) {
-    state.baselineHipY = hipY;
+  if (!state.baselineLocked) {
+    state.baselineSamples.push(hipY);
+    if (state.baselineSamples.length > BASELINE_WINDOW_FRAMES) {
+      state.baselineSamples.shift();
+    }
+    if (state.baselineSamples.length >= BASELINE_WINDOW_FRAMES) {
+      const samples = state.baselineSamples;
+      const mean = samples.reduce((acc, v) => acc + v, 0) / samples.length;
+      const variance =
+        samples.reduce((acc, v) => acc + (v - mean) ** 2, 0) / samples.length;
+      const stddev = Math.sqrt(variance);
+      if (stddev <= BASELINE_STDDEV_THRESHOLD) {
+        state.baselineHipY = mean;
+        state.baselineLocked = true;
+        state.lastHipY = hipY;
+      }
+    }
+    if (!state.baselineLocked) {
+      pipelineStatus.textContent = "Calibrating... stand still";
+      return;
+    }
   }
 
   const velocity = state.lastHipY === null ? 0 : hipY - state.lastHipY;
@@ -642,11 +676,8 @@ async function completeRep() {
   feedbackPanel.dataset.level = localOutcome.level;
   feedbackText.textContent = localOutcome.message;
 
-  updateLocalComparison(localOutcome);
-
-  const llmPayload = buildLlmRawPayload(repId);
-
   if (!LLM_COMPARE_ENABLED) {
+    updateLocalComparison(localOutcome);
     setLlmStatus("Disabled");
     llmMessageEl.textContent = "Enable llmCompareEnabled in calibration config.";
     setAgreementBadge("neutral", "LLM disabled");
@@ -654,6 +685,7 @@ async function completeRep() {
   }
 
   if (LLM_PROVIDER !== "gemini") {
+    updateLocalComparison(localOutcome);
     setLlmStatus("Unsupported provider");
     llmMessageEl.textContent = "Only Gemini provider is wired in this MVP.";
     setAgreementBadge("neutral", "LLM provider unsupported");
@@ -661,13 +693,23 @@ async function completeRep() {
   }
 
   if (!GEMINI_API_KEY) {
+    updateLocalComparison(localOutcome);
     setLlmStatus("API key missing");
     llmMessageEl.textContent = "Add geminiApiKey in calibration config.";
     setAgreementBadge("neutral", "Missing API key");
     return;
   }
 
+  if (state.llmInFlight) {
+    pipelineStatus.textContent = `Rep ${state.totalReps}: LLM busy on previous rep, skipped`;
+    return;
+  }
+
+  state.llmInFlight = true;
+  updateLocalComparison(localOutcome);
   setLlmPending();
+
+  const llmPayload = buildLlmRawPayload(repId);
 
   try {
     const started = performance.now();
@@ -681,10 +723,12 @@ async function completeRep() {
       llmMessageEl.textContent =
         "LLM timed out. Increase llmTimeoutMs or reduce payload size.";
       setAgreementBadge("neutral", "LLM timeout");
-      return;
+    } else {
+      llmMessageEl.textContent = "LLM call failed. Using local result only.";
+      setAgreementBadge("neutral", "LLM unavailable");
     }
-    llmMessageEl.textContent = "LLM call failed. Using local result only.";
-    setAgreementBadge("neutral", "LLM unavailable");
+  } finally {
+    state.llmInFlight = false;
   }
 }
 
@@ -815,8 +859,8 @@ async function requestGeminiFeedback(repSummary) {
 
 function buildGeminiPrompt(repSummary) {
   return [
-    "You are a strict squat-form evaluator.",
-    "Use only the JSON provided below.",
+    "You are a personal trainer giving advice on the form of a squat rep for a beginner.",
+    "Use only the JSON provided below as your input",
     "Compute all biomechanics from raw keypoint coordinates inside frames[].keypoints.",
     "Do not use fixed thresholds from outside data and do not reference local model output.",
     "Focus on depth, knee valgus/varus behavior over time, torso lean, and low-quality data.",
