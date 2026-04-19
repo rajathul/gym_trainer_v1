@@ -126,6 +126,7 @@ const state = {
   detector: null,
   stream: null,
   isRunning: false,
+  sessionStarted: false,
   repState: "STANDING",
   frameCount: 0,
   lastHipY: null,
@@ -210,15 +211,34 @@ function ensureVoiceEnabled() {
   }
 }
 
-function onFormCheckerClick() {
+function beginSession() {
+  state.sessionStarted = true;
+  state.repState = "STANDING";
+  state.totalReps = 0;
+  state.correctReps = 0;
+  state.incorrectReps = 0;
+  state.repSequence = 0;
+  state.lastHipY = null;
+  state.baselineHipY = null;
+  state.baselineLocked = false;
+  state.baselineSamples = [];
+  state.repMetrics = makeRepMetrics();
+  state.activeRepFrames = [];
+  state.activeRepStartedAtMs = null;
+  repCountEl.textContent = "0";
+  repStateEl.textContent = "STANDING";
   choiceOverlay.style.display = 'none';
+}
+
+function onFormCheckerClick() {
+  beginSession();
   setInstructions('Stand still to calibrate, then do a squat rep for form check.');
   ensureVoiceEnabled();
   window.voiceCoach?.startFormCheck();
 }
 
 function onStartSetsClick() {
-  choiceOverlay.style.display = 'none';
+  beginSession();
   setInstructions('Stand still to calibrate, then do your 5 reps.');
   ensureVoiceEnabled();
   window.voiceCoach?.startSet();
@@ -248,6 +268,7 @@ function setSoundButtonUI(on) {
 }
 
 function resetSession() {
+  state.sessionStarted = false;
   state.repState = "STANDING";
   state.totalReps = 0;
   state.correctReps = 0;
@@ -563,6 +584,9 @@ function extractLlmKeypoints(rawKeypointMap) {
 }
 
 function detectRepState(metrics) {
+  if (!state.sessionStarted) {
+    return;
+  }
   const nowMs = performance.now();
   const hipY = metrics.hip.y;
   const kneeY = metrics.knee.y;

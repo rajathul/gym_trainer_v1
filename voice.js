@@ -187,18 +187,15 @@ class VoiceCoach {
   onRepComplete(outcome) {
     if (!this.#enabled || this.#phase === 'IDLE') return;
 
+    this.speak(outcome.message);
+
     if (this.#phase === 'FORM_CHECK') {
       if (outcome.isCorrect) {
         this.#correctInFormCheck += 1;
         if (this.#correctInFormCheck >= 2) {
           this.#phase = 'SET_5';
           this.#setReps = 0;
-          this.speak("Excellent form! Now let's do a set of 5 reps. Go!");
-        } else {
-          this.speak('Great rep! One more good one to confirm your form.');
         }
-      } else {
-        this.speak(outcome.message + ' Try again.');
       }
       return;
     }
@@ -209,19 +206,7 @@ class VoiceCoach {
         if (this.#setReps >= 5) {
           this.#phase = 'IDLE';
           this.#setReps = 0;
-          this.speak('Five reps! Incredible work. You absolutely crushed that set!');
-        } else {
-          const left = 5 - this.#setReps;
-          const phrase = Math.random() < 0.5
-            ? ENCOURAGING[Math.floor(Math.random() * ENCOURAGING.length)]
-            : null;
-          const msg = phrase
-            ? `${this.#setReps} down! ${phrase} ${left} more to go!`
-            : `${this.#setReps} down, ${left} to go. Keep it up!`;
-          this.speak(msg);
         }
-      } else {
-        this.speak(outcome.message + ' Keep going!');
       }
     }
   }
