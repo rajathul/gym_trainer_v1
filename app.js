@@ -194,12 +194,17 @@ function onToggleText() {
 }
 
 function onToggleSound() {
-  state.soundEnabled = !state.soundEnabled;
-  toggleSoundButton.classList.toggle("is-active", state.soundEnabled);
-  console.log(
-    "[btn] Toggle Sound →",
-    state.soundEnabled ? "enabled (placeholder, no audio yet)" : "disabled"
-  );
+  if (window.voiceCoach?.isEnabled) {
+    window.voiceCoach.disable();
+    toggleSoundButton.classList.remove("sound-on");
+    toggleSoundButton.classList.add("sound-off");
+    toggleSoundButton.innerHTML = "Sound<br />Off";
+  } else {
+    window.voiceCoach?.enable();
+    toggleSoundButton.classList.remove("sound-off");
+    toggleSoundButton.classList.add("sound-on");
+    toggleSoundButton.innerHTML = "Sound<br />On";
+  }
 }
 
 function resetSession() {
@@ -249,6 +254,7 @@ async function startApp() {
     startButton.classList.add("is-active");
     resetButton.disabled = false;
     toggleTextButton.disabled = false;
+    toggleSoundButton.classList.add("sound-off");
     toggleSoundButton.disabled = false;
     pipelineStatus.textContent = "Live coaching";
     setInstructions("Stand still to calibrate, then begin your reps.");
@@ -780,8 +786,21 @@ async function completeRep() {
   }
 
   repCountEl.textContent = String(state.totalReps);
-  setInstructions(localOutcome.message);
-  window.voiceCoach?.onRepComplete(localOutcome);
+
+  if (window.groqCoach?.isReady) {
+    window.groqCoach.enhance(localOutcome.message)
+      .then(enhanced => {
+        setInstructions(enhanced);
+        window.voiceCoach?.onRepComplete({ ...localOutcome, message: enhanced });
+      })
+      .catch(() => {
+        setInstructions(localOutcome.message);
+        window.voiceCoach?.onRepComplete(localOutcome);
+      });
+  } else {
+    setInstructions(localOutcome.message);
+    window.voiceCoach?.onRepComplete(localOutcome);
+  }
 
   console.group(`[rep] ${repId} complete`);
   console.log("totals:", {
@@ -792,8 +811,6 @@ async function completeRep() {
   console.log("local-evaluation-input:", localInput);
   console.log("local-outcome:", localOutcome);
   console.groupEnd();
-
-  window.voiceCoach?.onRepComplete(localOutcome);
 
   if (!LLM_COMPARE_ENABLED) {
     logCompare(localOutcome, null, "LLM disabled");

@@ -1,5 +1,6 @@
 // Voice coaching module: SpeechSynthesis TTS + Web Speech API STT.
 // Loaded as type="module". Exposes window.voiceCoach for app.js to call.
+// Activated/deactivated via window.voiceCoach.enable() / .disable().
 
 const ENCOURAGING = [
   'Drive through your heels!',
@@ -20,16 +21,43 @@ class VoiceCoach {
   #sttPaused = false;
   #phase = 'IDLE'; // 'IDLE' | 'FORM_CHECK' | 'SET_5'
   #setReps = 0;
+  #enabled = false;
+  #initialized = false;
 
-  get phase()   { return this.#phase; }
-  get setReps() { return this.#setReps; }
+  get phase()     { return this.#phase; }
+  get setReps()   { return this.#setReps; }
+  get isEnabled() { return this.#enabled; }
+
+  // ── Enable / Disable ─────────────────────────────────────────────────────
+
+  enable() {
+    this.#enabled = true;
+    if (!this.#initialized) {
+      this.#initTTS();
+      this.#initSTT();
+      this.#initialized = true;
+      this.speak('Voice coach active. Say start to begin.');
+    } else {
+      this.#resumeSTT();
+      this.speak('Voice coach back on. Say start to begin.');
+    }
+  }
+
+  disable() {
+    this.#enabled = false;
+    this.#phase = 'IDLE';
+    this.#setReps = 0;
+    speechSynthesis.cancel();
+    this.#queue = [];
+    this.#speaking = false;
+    this.#pauseSTT();
+  }
 
   // ── TTS ──────────────────────────────────────────────────────────────────
 
-  initTTS() {
+  #initTTS() {
     const pickVoice = () => {
       const voices = speechSynthesis.getVoices();
-      // Prefer Google online voices; fall back to any English voice.
       this.#voice =
         voices.find(v => v.lang === 'en-US' && v.name.includes('Google')) ||
         voices.find(v => v.lang === 'en-GB' && v.name.includes('Google')) ||
@@ -42,6 +70,7 @@ class VoiceCoach {
   }
 
   speak(text) {
+    if (!this.#enabled) return;
     this.#queue.push(text);
     if (!this.#speaking) this.#drainQueue();
   }
@@ -65,16 +94,16 @@ class VoiceCoach {
       utt.pitch  = 1.0;
       utt.volume = 1.0;
       utt.onend   = resolve;
-      utt.onerror = resolve; // don't block queue on error
+      utt.onerror = resolve;
       speechSynthesis.speak(utt);
     });
   }
 
   // ── STT ──────────────────────────────────────────────────────────────────
 
-  initSTT() {
+  #initSTT() {
     const SR = window['SpeechRecognition'] || window['webkitSpeechRecognition'];
-    if (!SR) return false;
+    if (!SR) return;
 
     this.#recognition = new SR();
     this.#recognition.continuous = true;
@@ -82,6 +111,7 @@ class VoiceCoach {
     this.#recognition.lang = 'en-US';
 
     this.#recognition.onresult = e => {
+      if (!this.#enabled) return;
       const last = e.results[e.results.length - 1];
       if (!last.isFinal) return;
       const heard = last[0].transcript.toLowerCase().trim();
@@ -90,15 +120,13 @@ class VoiceCoach {
       }
     };
 
-    // Auto-restart unless we deliberately paused it for TTS.
     this.#recognition.onend = () => {
-      if (!this.#sttPaused) {
+      if (!this.#sttPaused && this.#enabled) {
         try { this.#recognition.start(); } catch {}
       }
     };
 
     this.#recognition.start();
-    return true;
   }
 
   #pauseSTT() {
@@ -108,25 +136,25 @@ class VoiceCoach {
 
   #resumeSTT() {
     this.#sttPaused = false;
-    try { this.#recognition?.start(); } catch {}
+    if (this.#enabled) {
+      try { this.#recognition?.start(); } catch {}
+    }
   }
 
   // ── Session state machine ─────────────────────────────────────────────────
 
   #startFormCheck() {
     this.#phase = 'FORM_CHECK';
-    renderVoiceStatus();
     this.speak("Let's check your form. Do one squat rep.");
   }
 
   onRepComplete(outcome) {
-    if (this.#phase === 'IDLE') return;
+    if (!this.#enabled || this.#phase === 'IDLE') return;
 
     if (this.#phase === 'FORM_CHECK') {
       if (outcome.isCorrect) {
         this.#phase = 'SET_5';
         this.#setReps = 0;
-        renderVoiceStatus();
         this.speak("Great form! Now let's do a set of 5 reps. Go!");
       } else {
         this.speak(outcome.message + ' Try again.');
@@ -137,11 +165,9 @@ class VoiceCoach {
     if (this.#phase === 'SET_5') {
       if (outcome.isCorrect) {
         this.#setReps += 1;
-        renderVoiceStatus();
         if (this.#setReps >= 5) {
           this.#phase = 'IDLE';
           this.#setReps = 0;
-          renderVoiceStatus();
           this.speak('Five reps! Incredible work. You absolutely crushed that set!');
         } else {
           const left = 5 - this.#setReps;
@@ -154,50 +180,10 @@ class VoiceCoach {
           this.speak(msg);
         }
       } else {
-        // Bad-form rep — give feedback but don't count toward the set.
         this.speak(outcome.message + ' Keep going!');
       }
     }
   }
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
-
-function renderVoiceStatus() {
-  const coach = window.voiceCoach;
-  const phaseEl    = document.getElementById('voicePhase');
-  const progressEl = document.getElementById('voiceSetProgress');
-  if (!phaseEl) return;
-
-  const labels = {
-    IDLE:       'Say "start" to begin a session',
-    FORM_CHECK: 'Form check — do one rep',
-    SET_5:      'Set in progress',
-  };
-  phaseEl.textContent    = labels[coach.phase] ?? '';
-  progressEl.textContent = coach.phase === 'SET_5' ? `${coach.setReps} / 5 reps` : '';
-}
-
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
-
 window.voiceCoach = new VoiceCoach();
-
-const loadBtn      = document.getElementById('loadVoiceBtn');
-const voiceStatusEl = document.getElementById('voiceStatus');
-
-loadBtn?.addEventListener('click', () => {
-  loadBtn.disabled = true;
-  loadBtn.textContent = 'Activating…';
-
-  window.voiceCoach.initTTS();
-  const hasMic = window.voiceCoach.initSTT();
-
-  voiceStatusEl.textContent = hasMic
-    ? 'Ready. Start the camera, then say "start".'
-    : 'Voice ready (speech recognition unavailable in this browser).';
-
-  loadBtn.textContent = 'Voice Active';
-  loadBtn.classList.add('voice-active');
-  document.getElementById('voiceSessionInfo').style.display = '';
-  renderVoiceStatus();
-});

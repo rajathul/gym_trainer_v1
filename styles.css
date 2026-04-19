@@ -209,6 +209,24 @@ body {
   outline-offset: -2px;
 }
 
+.footer-button.sound-on {
+  background: #2a7a55;
+  color: #fff;
+}
+
+.footer-button.sound-on:hover:not(:disabled) {
+  background: #348f66;
+}
+
+.footer-button.sound-off {
+  background: #a83232;
+  color: #fff;
+}
+
+.footer-button.sound-off:hover:not(:disabled) {
+  background: #c03a3a;
+}
+
 /* ── Voice Coach panel ───────────────────────────────────────────────────── */
 
 .voice-panel {
