@@ -3,24 +3,14 @@ const canvasEl = document.getElementById("overlay");
 const ctx = canvasEl.getContext("2d");
 
 const startButton = document.getElementById("startButton");
+const resetButton = document.getElementById("resetButton");
+const toggleTextButton = document.getElementById("toggleTextButton");
+const toggleSoundButton = document.getElementById("toggleSoundButton");
 const pipelineStatus = document.getElementById("pipelineStatus");
 
-const totalRepsEl = document.getElementById("totalReps");
-const correctRepsEl = document.getElementById("correctReps");
-const incorrectRepsEl = document.getElementById("incorrectReps");
+const repCountEl = document.getElementById("repCount");
+const instructionsEl = document.getElementById("instructions");
 const repStateEl = document.getElementById("repState");
-const fpsEl = document.getElementById("fps");
-const feedbackPanel = document.getElementById("feedbackPanel");
-const feedbackText = document.getElementById("feedbackText");
-
-const agreementBadgeEl = document.getElementById("agreementBadge");
-const localLabelEl = document.getElementById("localLabel");
-const localIssueEl = document.getElementById("localIssue");
-const localMessageEl = document.getElementById("localMessage");
-const llmStatusEl = document.getElementById("llmStatus");
-const llmLabelEl = document.getElementById("llmLabel");
-const llmIssueEl = document.getElementById("llmIssue");
-const llmMessageEl = document.getElementById("llmMessage");
 
 const DEFAULT_CONFIG = {
   motion_model: "movenet",
@@ -146,11 +136,14 @@ const state = {
   repMetrics: makeRepMetrics(),
   fpsWindowStart: performance.now(),
   fpsWindowFrames: 0,
+  currentFps: 0,
   repSequence: 0,
   activeRepFrames: [],
   activeRepStartedAtMs: null,
   llmInFlight: false,
   activeFacingMode: "user",
+  textVisible: true,
+  soundEnabled: false,
 };
 
 const EDGES = [
@@ -164,14 +157,72 @@ const EDGES = [
   ["right_knee", "right_ankle"],
 ];
 
-startButton.addEventListener("click", () => {
+console.info("[init] APP_CONFIG", APP_CONFIG);
+console.info("[init] motion model:", MOTION_MODEL, "| camera view:", CAMERA_VIEW);
+console.info("[init] LLM compare enabled:", LLM_COMPARE_ENABLED, "| provider:", LLM_PROVIDER);
+
+startButton.addEventListener("click", onStartClick);
+resetButton.addEventListener("click", onResetClick);
+toggleTextButton.addEventListener("click", onToggleText);
+toggleSoundButton.addEventListener("click", onToggleSound);
+
+logComparePanelInit();
+
+function onStartClick() {
+  console.log("[btn] Start clicked");
   if (state.isRunning) {
+    console.log("[btn] Start ignored — already running");
     return;
   }
   void startApp();
-});
+}
 
-bootstrapComparePanel();
+function onResetClick() {
+  console.log("[btn] Reset clicked");
+  if (!state.isRunning) {
+    console.log("[btn] Reset ignored — session not started");
+    return;
+  }
+  resetSession();
+}
+
+function onToggleText() {
+  state.textVisible = !state.textVisible;
+  instructionsEl.classList.toggle("hidden", !state.textVisible);
+  toggleTextButton.classList.toggle("is-active", !state.textVisible);
+  console.log("[btn] Toggle Text →", state.textVisible ? "shown" : "hidden");
+}
+
+function onToggleSound() {
+  state.soundEnabled = !state.soundEnabled;
+  toggleSoundButton.classList.toggle("is-active", state.soundEnabled);
+  console.log(
+    "[btn] Toggle Sound →",
+    state.soundEnabled ? "enabled (placeholder, no audio yet)" : "disabled"
+  );
+}
+
+function resetSession() {
+  state.repState = "STANDING";
+  state.totalReps = 0;
+  state.correctReps = 0;
+  state.incorrectReps = 0;
+  state.repSequence = 0;
+  state.lastHipY = null;
+  state.baselineHipY = null;
+  state.baselineLocked = false;
+  state.baselineSamples = [];
+  state.smoothBuckets = {};
+  state.repMetrics = makeRepMetrics();
+  state.activeRepFrames = [];
+  state.activeRepStartedAtMs = null;
+
+  repCountEl.textContent = "0";
+  repStateEl.textContent = "STANDING";
+  setInstructions("Session reset. Stand still to recalibrate.");
+  pipelineStatus.textContent = "Reset — recalibrating";
+  console.info("[session] reset complete");
+}
 
 async function startApp() {
   startButton.disabled = true;
@@ -179,27 +230,37 @@ async function startApp() {
 
   try {
     pipelineStatus.textContent = "Starting webcam";
+    console.info("[startup] requesting camera");
     await setupCamera();
 
     pipelineStatus.textContent = `Loading ${MOTION_MODEL}`;
+    console.info("[startup] initializing tfjs backend");
     await tf.setBackend("webgl");
     await tf.ready();
 
+    console.info("[startup] creating pose detector:", MOTION_MODEL);
     state.detector = await createPoseDetector(MOTION_MODEL);
 
     resizeCanvasToVideo();
     window.addEventListener("resize", resizeCanvasToVideo);
 
     state.isRunning = true;
-    startButton.textContent = "Camera Running";
+    startButton.textContent = "Running";
+    startButton.classList.add("is-active");
+    resetButton.disabled = false;
+    toggleTextButton.disabled = false;
+    toggleSoundButton.disabled = false;
     pipelineStatus.textContent = "Live coaching";
+    setInstructions("Stand still to calibrate, then begin your reps.");
+    console.info("[startup] live coaching started");
 
     requestAnimationFrame(loop);
   } catch (error) {
-    console.error(error);
+    console.error("[startup] failed:", error);
     pipelineStatus.textContent = "Unable to start. Check camera permission.";
     startButton.disabled = false;
-    startButton.textContent = "Start Camera";
+    startButton.textContent = "Start";
+    startButton.classList.remove("is-active");
   }
 }
 
@@ -472,6 +533,7 @@ function detectRepState(metrics) {
         state.baselineHipY = mean;
         state.baselineLocked = true;
         state.lastHipY = hipY;
+        console.info("[calibration] baseline locked at hipY =", round3(mean));
       }
     }
     if (!state.baselineLocked) {
@@ -489,6 +551,8 @@ function detectRepState(metrics) {
 
   updateRepMetrics(metrics, nowMs);
 
+  const previousState = state.repState;
+
   switch (state.repState) {
     case "STANDING": {
       if (
@@ -500,8 +564,7 @@ function detectRepState(metrics) {
         state.activeRepFrames = [];
         state.activeRepStartedAtMs = nowMs;
         updateRepMetrics(metrics, nowMs);
-        feedbackPanel.dataset.level = "neutral";
-        feedbackText.textContent = "Rep in progress...";
+        setInstructions("Rep in progress...");
       }
       break;
     }
@@ -539,6 +602,10 @@ function detectRepState(metrics) {
 
     default:
       state.repState = "STANDING";
+  }
+
+  if (previousState !== state.repState) {
+    console.log(`[rep-state] ${previousState} → ${state.repState}`);
   }
 
   repStateEl.textContent = state.repState;
@@ -712,65 +779,60 @@ async function completeRep() {
     state.incorrectReps += 1;
   }
 
-  totalRepsEl.textContent = String(state.totalReps);
-  correctRepsEl.textContent = String(state.correctReps);
-  incorrectRepsEl.textContent = String(state.incorrectReps);
+  repCountEl.textContent = String(state.totalReps);
+  setInstructions(localOutcome.message);
+  window.voiceCoach?.onRepComplete(localOutcome);
 
-  feedbackPanel.dataset.level = localOutcome.level;
-  feedbackText.textContent = localOutcome.message;
+  console.group(`[rep] ${repId} complete`);
+  console.log("totals:", {
+    total: state.totalReps,
+    correct: state.correctReps,
+    incorrect: state.incorrectReps,
+  });
+  console.log("local-evaluation-input:", localInput);
+  console.log("local-outcome:", localOutcome);
+  console.groupEnd();
 
   window.voiceCoach?.onRepComplete(localOutcome);
 
   if (!LLM_COMPARE_ENABLED) {
-    updateLocalComparison(localOutcome);
-    setLlmStatus("Disabled");
-    llmMessageEl.textContent = "Enable llmCompareEnabled in calibration config.";
-    setAgreementBadge("neutral", "LLM disabled");
+    logCompare(localOutcome, null, "LLM disabled");
     return;
   }
 
   if (LLM_PROVIDER !== "gemini") {
-    updateLocalComparison(localOutcome);
-    setLlmStatus("Unsupported provider");
-    llmMessageEl.textContent = "Only Gemini provider is wired in this MVP.";
-    setAgreementBadge("neutral", "LLM provider unsupported");
+    logCompare(localOutcome, null, "LLM provider unsupported");
     return;
   }
 
   if (!GEMINI_API_KEY) {
-    updateLocalComparison(localOutcome);
-    setLlmStatus("API key missing");
-    llmMessageEl.textContent = "Add geminiApiKey in calibration config.";
-    setAgreementBadge("neutral", "Missing API key");
+    logCompare(localOutcome, null, "Missing API key");
     return;
   }
 
   if (state.llmInFlight) {
     pipelineStatus.textContent = `Rep ${state.totalReps}: LLM busy on previous rep, skipped`;
+    console.warn(`[llm] ${repId} skipped — previous LLM call still in flight`);
     return;
   }
 
   state.llmInFlight = true;
-  updateLocalComparison(localOutcome);
-  setLlmPending();
 
   const llmPayload = buildLlmRawPayload(repId);
+  console.log(`[llm] ${repId} request payload`, llmPayload);
 
   try {
     const started = performance.now();
     const llmResult = await requestGeminiFeedback(llmPayload);
     const latencyMs = Math.round(performance.now() - started);
-    applyLlmComparison(localOutcome, llmResult, latencyMs);
+    console.log(`[llm] ${repId} response (${latencyMs}ms)`, llmResult);
+    logCompare(localOutcome, llmResult, `latency=${latencyMs}ms`);
   } catch (error) {
-    console.error(error);
-    setLlmStatus("Error");
+    console.error(`[llm] ${repId} failed:`, error);
     if (error && error.name === "AbortError") {
-      llmMessageEl.textContent =
-        "LLM timed out. Increase llmTimeoutMs or reduce payload size.";
-      setAgreementBadge("neutral", "LLM timeout");
+      logCompare(localOutcome, null, "LLM timeout");
     } else {
-      llmMessageEl.textContent = "LLM call failed. Using local result only.";
-      setAgreementBadge("neutral", "LLM unavailable");
+      logCompare(localOutcome, null, "LLM error");
     }
   } finally {
     state.llmInFlight = false;
@@ -996,58 +1058,42 @@ function validateLlmOutput(output) {
   };
 }
 
-function bootstrapComparePanel() {
+function logComparePanelInit() {
   if (!LLM_COMPARE_ENABLED) {
-    setLlmStatus("Disabled");
-    llmMessageEl.textContent = "Enable llmCompareEnabled in calibration config.";
+    console.info("[llm-compare] disabled — set llmCompareEnabled in calibration config");
   } else if (!GEMINI_API_KEY) {
-    setLlmStatus("API key missing");
-    llmMessageEl.textContent = "Add geminiApiKey in calibration config.";
+    console.warn("[llm-compare] enabled but Gemini API key is missing");
   } else {
-    setLlmStatus("Ready");
-    llmMessageEl.textContent = "Waiting for rep...";
+    console.info("[llm-compare] ready, waiting for first rep");
   }
 }
 
-function updateLocalComparison(localOutcome) {
-  localLabelEl.textContent = localOutcome.label;
-  localIssueEl.textContent = ISSUE_LABEL_MAP[localOutcome.primaryIssue] || localOutcome.primaryIssue;
-  localMessageEl.textContent = localOutcome.message;
-}
-
-function setLlmPending() {
-  setLlmStatus("Running...");
-  llmLabelEl.textContent = "-";
-  llmIssueEl.textContent = "-";
-  llmMessageEl.textContent = "Evaluating this rep with Gemini...";
-  setAgreementBadge("neutral", "Computing agreement");
-}
-
-function applyLlmComparison(localOutcome, llmResult, latencyMs) {
-  setLlmStatus(`Done (${latencyMs}ms)`);
-  llmLabelEl.textContent = llmResult.label;
-  llmIssueEl.textContent = ISSUE_LABEL_MAP[llmResult.primaryIssue] || llmResult.primaryIssue;
-  llmMessageEl.textContent = llmResult.message;
-
-  const agreement =
-    localOutcome.label === llmResult.label &&
-    localOutcome.primaryIssue === llmResult.primaryIssue;
-
-  if (agreement) {
-    setAgreementBadge("good", "Models agree");
+function logCompare(localOutcome, llmResult, note) {
+  console.group("[llm-compare] rep result");
+  console.log("local:", {
+    label: localOutcome.label,
+    issue: ISSUE_LABEL_MAP[localOutcome.primaryIssue] || localOutcome.primaryIssue,
+    message: localOutcome.message,
+  });
+  if (llmResult) {
+    console.log("llm:", {
+      label: llmResult.label,
+      issue: ISSUE_LABEL_MAP[llmResult.primaryIssue] || llmResult.primaryIssue,
+      message: llmResult.message,
+      confidence: llmResult.confidence,
+    });
+    const agreement =
+      localOutcome.label === llmResult.label &&
+      localOutcome.primaryIssue === llmResult.primaryIssue;
+    console.log("agreement:", agreement ? "AGREE" : "DISAGREE");
   } else {
-    setAgreementBadge("bad", "Models disagree");
+    console.log("llm:", note || "no result");
   }
+  console.groupEnd();
 }
 
-function setAgreementBadge(kind, text) {
-  agreementBadgeEl.classList.remove("good", "bad", "neutral");
-  agreementBadgeEl.classList.add(kind);
-  agreementBadgeEl.textContent = text;
-}
-
-function setLlmStatus(text) {
-  llmStatusEl.textContent = text;
+function setInstructions(text) {
+  instructionsEl.textContent = text;
 }
 
 function updateFps() {
@@ -1056,8 +1102,8 @@ function updateFps() {
   const elapsedMs = now - state.fpsWindowStart;
 
   if (elapsedMs >= 1000) {
-    const fps = Math.round((state.fpsWindowFrames * 1000) / elapsedMs);
-    fpsEl.textContent = String(fps);
+    state.currentFps = Math.round((state.fpsWindowFrames * 1000) / elapsedMs);
+    console.debug("[fps]", state.currentFps);
     state.fpsWindowFrames = 0;
     state.fpsWindowStart = now;
   }

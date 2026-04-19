@@ -10,96 +10,62 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700;1,900&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
-    <div class="background-glow glow-1"></div>
-    <div class="background-glow glow-2"></div>
+    <main class="phone-shell">
+      <div class="phone-frame">
+        <div class="camera-stage" id="cameraStage">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
 
-    <main class="app-shell">
-      <header class="top-bar">
-        <div>
-          <p class="eyebrow">AI FORM COACH</p>
-          <h1>Squat Trainer</h1>
-        </div>
-        <button id="startButton" class="start-button">Start Camera</button>
-      </header>
-
-      <section class="content-grid">
-        <div class="video-panel">
-          <div class="video-frame" id="videoFrame">
-            <video id="video" autoplay playsinline muted></video>
-            <canvas id="overlay"></canvas>
-            <div class="status-pill" id="pipelineStatus">Model not started</div>
+          <div class="overlay-content">
+            <div class="rep-count" id="repCount">0</div>
+            <div class="instructions" id="instructions">
+              Press Start to begin your session.
+            </div>
           </div>
+
+          <div class="status-pill" id="pipelineStatus">Model not started</div>
         </div>
 
-        <aside class="stats-panel">
-          <div class="stat-card">
-            <h2>Total Reps</h2>
-            <p id="totalReps">0</p>
+        <footer class="footer-bar">
+          <div class="status-row">
+            <span class="status-label">Status:</span>
+            <span class="status-value" id="repState">STANDING</span>
           </div>
-          <div class="stat-card ok">
-            <h2>Correct</h2>
-            <p id="correctReps">0</p>
+          <div class="button-row">
+            <button id="startButton" class="footer-button primary">Start</button>
+            <button id="resetButton" class="footer-button" disabled>Reset</button>
+            <button id="toggleTextButton" class="footer-button" disabled>
+              Toggle<br />Text
+            </button>
+            <button id="toggleSoundButton" class="footer-button" disabled>
+              Toggle<br />Sound
+            </button>
           </div>
-          <div class="stat-card warn">
-            <h2>Needs Work</h2>
-            <p id="incorrectReps">0</p>
-          </div>
-          <div class="meta-row">
-            <span>State: <strong id="repState">STANDING</strong></span>
-            <span>FPS: <strong id="fps">0</strong></span>
-          </div>
-        </aside>
-      </section>
+        </footer>
+      </div>
 
-      <section class="feedback-panel" id="feedbackPanel" data-level="neutral">
-        <h2>Last Feedback</h2>
-        <p id="feedbackText">Press Start Camera and perform a squat.</p>
-      </section>
-
-      <section class="voice-panel">
+      <div class="voice-panel">
         <div class="voice-head">
           <div>
             <h2>Voice Coach</h2>
-            <p class="voice-sub">Kokoro TTS · Web Speech API</p>
+            <p class="voice-sub">Web Speech API</p>
           </div>
-          <button id="loadVoiceBtn" class="start-button">Load Voice Coach</button>
+          <button id="loadVoiceBtn" class="load-voice-btn">Load Voice Coach</button>
         </div>
-        <p id="voiceStatus" class="voice-status">Click to download and activate voice coaching.</p>
+        <p id="voiceStatus" class="voice-status">Click to activate voice coaching.</p>
         <div id="voiceSessionInfo" style="display:none" class="voice-session">
           <span class="voice-mic">🎙</span>
           <span id="voicePhase">Waiting…</span>
           <span id="voiceSetProgress" class="voice-progress"></span>
         </div>
-      </section>
-
-      <section class="compare-panel">
-        <div class="compare-head">
-          <h2>Local vs LLM Comparison</h2>
-          <span id="agreementBadge" class="agreement-badge neutral">Waiting for rep</span>
-        </div>
-        <div class="compare-grid">
-          <article class="compare-card">
-            <h3>Local Math Model</h3>
-            <p><strong>Label:</strong> <span id="localLabel">-</span></p>
-            <p><strong>Issue:</strong> <span id="localIssue">-</span></p>
-            <p id="localMessage">No rep yet.</p>
-          </article>
-          <article class="compare-card">
-            <h3>LLM Model (Gemini)</h3>
-            <p><strong>Status:</strong> <span id="llmStatus">Disabled</span></p>
-            <p><strong>Label:</strong> <span id="llmLabel">-</span></p>
-            <p><strong>Issue:</strong> <span id="llmIssue">-</span></p>
-            <p id="llmMessage">Enable compare mode in calibration config.</p>
-          </article>
-        </div>
-      </section>
+      </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -107,7 +73,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
     <script src="./calibration.config.js"></script>
     <script src="./calibration.local.js" onerror="this.remove()"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=3"></script>
     <script type="module" src="./voice.js"></script>
   </body>
 </html>
