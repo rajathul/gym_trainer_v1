@@ -7,6 +7,9 @@ const resetButton = document.getElementById("resetButton");
 const toggleTextButton = document.getElementById("toggleTextButton");
 const toggleSoundButton = document.getElementById("toggleSoundButton");
 const pipelineStatus = document.getElementById("pipelineStatus");
+const choiceOverlay = document.getElementById("choiceOverlay");
+const formCheckerBtn = document.getElementById("formCheckerBtn");
+const startSetsBtn = document.getElementById("startSetsBtn");
 
 const repCountEl = document.getElementById("repCount");
 const instructionsEl = document.getElementById("instructions");
@@ -165,6 +168,8 @@ startButton.addEventListener("click", onStartClick);
 resetButton.addEventListener("click", onResetClick);
 toggleTextButton.addEventListener("click", onToggleText);
 toggleSoundButton.addEventListener("click", onToggleSound);
+formCheckerBtn.addEventListener("click", onFormCheckerClick);
+startSetsBtn.addEventListener("click", onStartSetsClick);
 
 logComparePanelInit();
 
@@ -193,18 +198,53 @@ function onToggleText() {
   console.log("[btn] Toggle Text →", state.textVisible ? "shown" : "hidden");
 }
 
-function onToggleSound() {
-  if (window.voiceCoach?.isEnabled) {
-    window.voiceCoach.disable();
-    toggleSoundButton.classList.remove("sound-on");
-    toggleSoundButton.classList.add("sound-off");
-    toggleSoundButton.innerHTML = "Sound<br />Off";
-  } else {
-    window.voiceCoach?.enable();
-    toggleSoundButton.classList.remove("sound-off");
-    toggleSoundButton.classList.add("sound-on");
-    toggleSoundButton.innerHTML = "Sound<br />On";
+function ensureVoiceEnabled() {
+  const vc = window.voiceCoach;
+  if (!vc) return;
+  if (!vc.isEnabled) {
+    vc.enable();
+    setSoundButtonUI(true);
+  } else if (vc.isMuted) {
+    vc.unmute();
+    setSoundButtonUI(true);
   }
+}
+
+function onFormCheckerClick() {
+  choiceOverlay.style.display = 'none';
+  setInstructions('Stand still to calibrate, then do a squat rep for form check.');
+  ensureVoiceEnabled();
+  window.voiceCoach?.startFormCheck();
+}
+
+function onStartSetsClick() {
+  choiceOverlay.style.display = 'none';
+  setInstructions('Stand still to calibrate, then do your 5 reps.');
+  ensureVoiceEnabled();
+  window.voiceCoach?.startSet();
+}
+
+function onToggleSound() {
+  const vc = window.voiceCoach;
+  if (!vc) return;
+  if (!vc.isEnabled) {
+    vc.enable();
+    setSoundButtonUI(true);
+    return;
+  }
+  if (vc.isMuted) {
+    vc.unmute();
+    setSoundButtonUI(true);
+  } else {
+    vc.mute();
+    setSoundButtonUI(false);
+  }
+}
+
+function setSoundButtonUI(on) {
+  toggleSoundButton.classList.toggle("sound-on", on);
+  toggleSoundButton.classList.toggle("sound-off", !on);
+  toggleSoundButton.innerHTML = on ? "Sound<br />On" : "Sound<br />Off";
 }
 
 function resetSession() {
@@ -224,8 +264,10 @@ function resetSession() {
 
   repCountEl.textContent = "0";
   repStateEl.textContent = "STANDING";
-  setInstructions("Session reset. Stand still to recalibrate.");
+  setInstructions("Choose how to start your session.");
   pipelineStatus.textContent = "Reset — recalibrating";
+  choiceOverlay.style.display = '';
+  window.voiceCoach?.reset();
   console.info("[session] reset complete");
 }
 
@@ -257,7 +299,8 @@ async function startApp() {
     toggleSoundButton.classList.add("sound-off");
     toggleSoundButton.disabled = false;
     pipelineStatus.textContent = "Live coaching";
-    setInstructions("Stand still to calibrate, then begin your reps.");
+    setInstructions("Choose how to start your session.");
+    choiceOverlay.style.display = '';
     console.info("[startup] live coaching started");
 
     requestAnimationFrame(loop);
@@ -788,15 +831,12 @@ async function completeRep() {
   repCountEl.textContent = String(state.totalReps);
 
   if (window.groqCoach?.isReady) {
-    window.groqCoach.enhance(localOutcome.message)
+    window.groqCoach.enhance(localOutcome.message, { isCorrect: localOutcome.isCorrect })
       .then(enhanced => {
         setInstructions(enhanced);
         window.voiceCoach?.onRepComplete({ ...localOutcome, message: enhanced });
       })
-      .catch(() => {
-        setInstructions(localOutcome.message);
-        window.voiceCoach?.onRepComplete(localOutcome);
-      });
+      .catch(err => console.warn('[groq] enhance failed:', err));
   } else {
     setInstructions(localOutcome.message);
     window.voiceCoach?.onRepComplete(localOutcome);

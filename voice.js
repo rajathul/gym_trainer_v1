@@ -21,12 +21,15 @@ class VoiceCoach {
   #sttPaused = false;
   #phase = 'IDLE'; // 'IDLE' | 'FORM_CHECK' | 'SET_5'
   #setReps = 0;
+  #correctInFormCheck = 0;
   #enabled = false;
+  #muted = false;
   #initialized = false;
 
   get phase()     { return this.#phase; }
   get setReps()   { return this.#setReps; }
   get isEnabled() { return this.#enabled; }
+  get isMuted()   { return this.#muted; }
 
   // ── Enable / Disable ─────────────────────────────────────────────────────
 
@@ -47,10 +50,43 @@ class VoiceCoach {
     this.#enabled = false;
     this.#phase = 'IDLE';
     this.#setReps = 0;
+    this.#correctInFormCheck = 0;
     speechSynthesis.cancel();
     this.#queue = [];
     this.#speaking = false;
     this.#pauseSTT();
+  }
+
+  mute() {
+    this.#muted = true;
+    speechSynthesis.cancel();
+    this.#queue = [];
+    this.#speaking = false;
+  }
+
+  unmute() {
+    this.#muted = false;
+  }
+
+  reset() {
+    this.#phase = 'IDLE';
+    this.#setReps = 0;
+    this.#correctInFormCheck = 0;
+    speechSynthesis.cancel();
+    this.#queue = [];
+    this.#speaking = false;
+  }
+
+  startFormCheck() {
+    this.#correctInFormCheck = 0;
+    this.#startFormCheck();
+  }
+
+  startSet() {
+    this.#phase = 'SET_5';
+    this.#setReps = 0;
+    this.#correctInFormCheck = 0;
+    this.speak("Let's do a set of 5 reps. Go!");
   }
 
   // ── TTS ──────────────────────────────────────────────────────────────────
@@ -70,7 +106,7 @@ class VoiceCoach {
   }
 
   speak(text) {
-    if (!this.#enabled) return;
+    if (!this.#enabled || this.#muted) return;
     this.#queue.push(text);
     if (!this.#speaking) this.#drainQueue();
   }
@@ -153,9 +189,14 @@ class VoiceCoach {
 
     if (this.#phase === 'FORM_CHECK') {
       if (outcome.isCorrect) {
-        this.#phase = 'SET_5';
-        this.#setReps = 0;
-        this.speak("Great form! Now let's do a set of 5 reps. Go!");
+        this.#correctInFormCheck += 1;
+        if (this.#correctInFormCheck >= 2) {
+          this.#phase = 'SET_5';
+          this.#setReps = 0;
+          this.speak("Excellent form! Now let's do a set of 5 reps. Go!");
+        } else {
+          this.speak('Great rep! One more good one to confirm your form.');
+        }
       } else {
         this.speak(outcome.message + ' Try again.');
       }

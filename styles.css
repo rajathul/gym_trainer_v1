@@ -227,6 +227,75 @@ body {
   background: #c03a3a;
 }
 
+/* ── Choice overlay ─────────────────────────────────────────────────────── */
+
+.choice-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px 20px;
+  z-index: 10;
+}
+
+.choice-title {
+  margin: 0 0 4px;
+  font-family: "Playfair Display", serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: clamp(18px, 4.5vw, 24px);
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.choice-btn {
+  width: 100%;
+  max-width: 280px;
+  background: var(--accent);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 18px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: background 150ms ease, transform 120ms ease;
+  touch-action: manipulation;
+}
+
+.choice-btn:hover {
+  background: #ffb866;
+}
+
+.choice-btn:active {
+  transform: translateY(1px);
+}
+
+.choice-btn.secondary {
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+.choice-btn.secondary:hover {
+  background: var(--button-bg-hover);
+}
+
+.choice-hint {
+  font-size: 0.72rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
 /* ── Voice Coach panel ───────────────────────────────────────────────────── */
 
 .voice-panel {

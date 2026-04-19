@@ -9,10 +9,17 @@ const GROQ_API_KEY =
 const GROQ_MODEL      = 'llama-3.1-8b-instant';
 const GROQ_TIMEOUT_MS = 3000;
 
-const SYSTEM_PROMPT =
+const SYSTEM_PROMPT_FIX =
   'You are an intense, motivating squat coach giving real-time rep feedback. ' +
   'Rewrite the coaching cue as ONE punchy sentence, 12 words max. ' +
   'Keep the core technical advice. Sound like a real coach — direct, energetic, human. ' +
+  'No hashtags. No emojis. No quotation marks. Just the sentence.';
+
+const SYSTEM_PROMPT_PRAISE =
+  'You are an intense, motivating squat coach. The athlete just nailed a rep with perfect form. ' +
+  'Respond with ONE punchy sentence of pure praise/hype, 12 words max. ' +
+  'Do NOT give any advice, corrections, or technique tips — the form was correct. ' +
+  'Sound like a real coach — direct, energetic, human. ' +
   'No hashtags. No emojis. No quotation marks. Just the sentence.';
 
 window.groqCoach = {
@@ -20,7 +27,8 @@ window.groqCoach = {
     return Boolean(GROQ_API_KEY);
   },
 
-  async enhance(message) {
+  async enhance(message, { isCorrect = false } = {}) {
+    const systemPrompt = isCorrect ? SYSTEM_PROMPT_PRAISE : SYSTEM_PROMPT_FIX;
     const call = fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -30,7 +38,7 @@ window.groqCoach = {
       body: JSON.stringify({
         model: GROQ_MODEL,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user',   content: message },
         ],
         max_tokens: 40,
