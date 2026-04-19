@@ -39,10 +39,10 @@ class VoiceCoach {
       this.#initTTS();
       this.#initSTT();
       this.#initialized = true;
-      this.speak('Voice coach active. Say start to begin.');
+      this.speak('Starting');
     } else {
       this.#resumeSTT();
-      this.speak('Voice coach back on. Say start to begin.');
+      this.speak('Starting');
     }
   }
 
