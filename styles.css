@@ -226,6 +226,75 @@ h1 {
   border-left-color: var(--bad);
 }
 
+.voice-panel {
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
+}
+
+.voice-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.voice-head h2 {
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.voice-sub {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-sub);
+  opacity: 0.7;
+}
+
+.voice-status {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-sub);
+}
+
+.voice-session {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(11, 24, 37, 0.85);
+  border: 1px solid rgba(76, 201, 240, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+}
+
+.voice-mic {
+  font-size: 1.1rem;
+  animation: pulse-mic 2s ease-in-out infinite;
+}
+
+.voice-progress {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.start-button.voice-active {
+  background: linear-gradient(140deg, #0e4d2c, #1a7a48);
+  border-color: rgba(46, 194, 126, 0.5);
+}
+
+@keyframes pulse-mic {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
 .compare-panel {
   border: 1px solid var(--stroke);
   background: var(--panel);

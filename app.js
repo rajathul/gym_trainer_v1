@@ -676,6 +676,8 @@ async function completeRep() {
   feedbackPanel.dataset.level = localOutcome.level;
   feedbackText.textContent = localOutcome.message;
 
+  window.voiceCoach?.onRepComplete(localOutcome);
+
   if (!LLM_COMPARE_ENABLED) {
     updateLocalComparison(localOutcome);
     setLlmStatus("Disabled");

@@ -60,6 +60,22 @@
         <p id="feedbackText">Press Start Camera and perform a squat.</p>
       </section>
 
+      <section class="voice-panel">
+        <div class="voice-head">
+          <div>
+            <h2>Voice Coach</h2>
+            <p class="voice-sub">Kokoro TTS · Web Speech API</p>
+          </div>
+          <button id="loadVoiceBtn" class="start-button">Load Voice Coach</button>
+        </div>
+        <p id="voiceStatus" class="voice-status">Click to download and activate voice coaching.</p>
+        <div id="voiceSessionInfo" style="display:none" class="voice-session">
+          <span class="voice-mic">🎙</span>
+          <span id="voicePhase">Waiting…</span>
+          <span id="voiceSetProgress" class="voice-progress"></span>
+        </div>
+      </section>
+
       <section class="compare-panel">
         <div class="compare-head">
           <h2>Local vs LLM Comparison</h2>
@@ -89,5 +105,6 @@
     <script src="./calibration.config.js"></script>
     <script src="./calibration.local.js" onerror="this.remove()"></script>
     <script src="./app.js"></script>
+    <script type="module" src="./voice.js"></script>
   </body>
 </html>
